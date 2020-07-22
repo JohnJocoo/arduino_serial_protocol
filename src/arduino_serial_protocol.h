@@ -3,31 +3,44 @@
 #include <stddef.h>
 #include <stdint.h>
 
-enum class ReadOperation
+enum class ArduinoSerialGeneralResult
 {
-    NOPE,
-    READ_HEADER_PROCESS,
-    READ_PAYLOAD
+    OK,
+    ERROR_WRONG_STATE,
+    ERROR_NOT_SYNCED,
+    ERROR_PAYLOAD_SIZE_TOO_BIG,
+    ERROR_UNDEFINED
 };
 
-enum class ReadResult
+enum class ArduinoSerialOperation
 {
     NOPE,
+    READ_HEADER,
+    READ_PAYLOAD,
+    SEND_SYNC_REPLY
+};
+
+enum class ArduinoSerialReadResult
+{
+    NOPE,
+    OK,
     ERROR_UNEXPECTED_DATA,
     ERROR_CHECKSUM,
     ERROR_INSUFFICIENT_DATA_LENGTH
 };
 
-struct NextReadOperation
+using ArduinoSerialProtocolID = uint16_t;
+
+struct ArduinoSerialNextOperation
 {
-    ReadOperation read_operation;
+    ArduinoSerialOperation read_operation;
     size_t bytes_to_read;
-    uint16_t id;
+    ArduinoSerialProtocolID id;
 };
 
-struct ReceiveResult
+struct ArduinoSerialReceiveResult
 {
-    ReadResult read_result;
+    ArduinoSerialReadResult read_result;
     size_t bytes_read;
 };
 
@@ -35,7 +48,6 @@ struct ReceiveResult
 class ArduinoSerialProtocol
 {
 public:
-    static ArduinoSerialProtocol createPrimary();
     static ArduinoSerialProtocol createSecondary();
 
     ArduinoSerialProtocol(const ArduinoSerialProtocol&) = delete;
@@ -43,24 +55,48 @@ public:
 
     ~ArduinoSerialProtocol() = default;
 
-    constexpr size_t headerSize() const
+    size_t headerSize() const
     { return 8; }
+
+    size_t syncHeaderSize() const
+    { return 4; }
+
+    size_t syncReplyHeaderSize() const
+    { return 4; }
 
     size_t packetSize(size_t payload_size) const
     { return headerSize() + payload_size; }
 
-    uint16_t createPacketWriteHeader(void* header, void* payload,
-                                     size_t payload_size);
+    ArduinoSerialProtocolID createNextPacketId();
 
-    NextReadOperation nextReadOperation() const;
+    ArduinoSerialGeneralResult
+    writeHeader(void* header, ArduinoSerialProtocolID id,
+                const void* payload, size_t payload_size) const;
 
-    ReceiveResult readBytes(const void* data, size_t data_size);
+    ArduinoSerialGeneralResult writeSyncReplyHeader(void* header) const;
+
+    ArduinoSerialGeneralResult syncReplySent();
+
+    ArduinoSerialNextOperation nextOperation() const;
+
+    ArduinoSerialReceiveResult readBytes(const void* data, size_t data_size);
+
+public:
+    struct PayloadState
+    {
+        size_t payload_len;
+        uint16_t packet_id;
+        uint16_t crc16;
+        uint16_t crc16_header;
+    };
 
 private:
-    explicit ArduinoSerialProtocol(bool is_primary);
+    explicit ArduinoSerialProtocol();
 
-    bool is_primary;
-    bool is_synced;
     char state;
+    bool was_synced;
+    uint16_t seq_id;
+
+    PayloadState payload_state;
 
 }; // class ArduinoSerialProtocol

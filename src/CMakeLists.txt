@@ -3,11 +3,13 @@ cmake_minimum_required(VERSION 3.2)
 find_library(C_LIB c)
 message(STATUS "avr-libc: ${C_LIB}")
 
+set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+
 set(LIB_HEADERS
-      "arduino_serial_protocol.h")
+      "${SRC_DIR}/arduino_serial_protocol.h")
 
 set(LIB_SRC
-      "arduino_serial_protocol.cpp")
+      "${SRC_DIR}/arduino_serial_protocol.cpp")
 
 add_avr_library(arduino_serial_protocol
                 ${LIB_SRC}

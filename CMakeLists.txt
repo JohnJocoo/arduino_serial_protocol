@@ -120,6 +120,7 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 # compiler options for all build types
 ##########################################################################
 add_definitions("-DF_CPU=${MCU_SPEED}")
+add_definitions("-DARDUINO=1")
 add_definitions("-fpack-struct")
 add_definitions("-fshort-enums")
 add_definitions("-Wall")
