@@ -5,7 +5,8 @@
 #ifndef ARDUINO
     #include <netinet/in.h>
 
-    /* crc8 calculation ported from AVR_LIBC
+    /* CRC-8-CCITT
+     * crc8 calculation ported from AVR_LIBC
      * https://www.nongnu.org/avr-libc/user-manual/group__util__crc.html
      * Copyright Jack Crenshaw
      * Copyright (c) 2002, 2003, 2004  Marek Michalkiewicz
@@ -36,7 +37,8 @@
         return data;
     }
 
-    /* crc16 calculation ported from AVR_LIBC
+    /* CRC-CCITT/FALSE
+     * crc16 calculation ported from AVR_LIBC
      * https://www.nongnu.org/avr-libc/user-manual/group__util__crc.html
      * Copyright Jack Crenshaw
      * Copyright (c) 2002, 2003, 2004  Marek Michalkiewicz
@@ -45,18 +47,17 @@
      * Copyright (c) 2013 Frederic Nadeau
      */
     uint16_t
-    _crc16_update(uint16_t crc, uint8_t a)
+    _crc_ccitt_update(uint16_t crc, uint8_t data)
     {
-        int i;
-
-        crc ^= a;
-        for (i = 0; i < 8; ++i)
+        crc = crc ^ (int) data << 8;
+        size_t i = 8;
+        do
         {
-            if (crc & 1)
-                crc = (crc >> 1) ^ 0xA001;
+            if (crc & 0x8000)
+                crc = crc << 1 ^ 0x1021;
             else
-                crc = (crc >> 1);
-        }
+                crc = crc << 1;
+        } while(--i);
 
         return crc;
     }
@@ -124,7 +125,7 @@ uint8_t calculate_crc8(const void* header)
 
     const uint8_t* data = static_cast<const uint8_t*>(header);
     uint8_t crc8 = 0;
-    for (uint8_t i = 0; i < crc_len; ++i, ++data)
+    for (size_t i = 0; i < crc_len; ++i, ++data)
     {
         crc8 = _crc8_ccitt_update(crc8, *data);
     }
@@ -137,9 +138,9 @@ uint16_t calculate_crc16_header(const void* _header)
 
     const uint8_t* header = static_cast<const uint8_t*>(_header);
     uint16_t crc16 = 0xFFFF;
-    for (uint8_t i = 0; i < crc_len; ++i, ++header)
+    for (size_t i = 0; i < crc_len; ++i, ++header)
     {
-        crc16 = _crc16_update(crc16, *header);
+        crc16 = _crc_ccitt_update(crc16, *header);
     }
     return crc16;
 }
@@ -150,7 +151,7 @@ uint16_t calculate_crc16_payload(
     const uint8_t* payload = static_cast<const uint8_t*>(_payload);
     for (size_t i = 0; i < payload_size; ++i, ++payload)
     {
-        crc16 = _crc16_update(crc16, *payload);
+        crc16 = _crc_ccitt_update(crc16, *payload);
     }
     return crc16;
 }
@@ -266,23 +267,27 @@ read_payload(char& state, ArduinoSerialProtocol::PayloadState& payload_state,
             payload_state.crc16_header, data, payload_state.payload_len);
     if (crc16 != payload_state.crc16)
     {
+        size_t p_len = payload_state.payload_len;
         clear(payload_state);
         set_state(state, State::IDLE);
 
         return receive_result(
-                ArduinoSerialReadResult::ERROR_CHECKSUM,
-                payload_state.payload_len);
+                ArduinoSerialReadResult::ERROR_CHECKSUM, p_len);
     }
 
+    size_t p_len = payload_state.payload_len;
     clear(payload_state);
     set_state(state, State::IDLE);
 
-    return receive_result(ArduinoSerialReadResult::OK,
-                          payload_state.payload_len);
+    return receive_result(ArduinoSerialReadResult::OK, p_len);
 }
 
 }
 
+ArduinoSerialProtocol ArduinoSerialProtocol::createSecondary()
+{
+    return ArduinoSerialProtocol{};
+}
 
 ArduinoSerialProtocol::ArduinoSerialProtocol()
 : state{static_cast<char>(State::WAITING_SYNC)}
