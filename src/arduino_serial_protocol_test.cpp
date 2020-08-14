@@ -226,6 +226,16 @@ TEST_F(FArduinoSerialProtocol, CreatePacket2)
     EXPECT_EQ(0x45, data.at(11));
 }
 
+TEST_F(FArduinoSerialProtocol, CreatePacketPayloadTooBig)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    auto data = std::vector<uint8_t>(protocol->packetSize(256), 0);
+    auto header_result = protocol->writeHeader(data.data(), 1,
+                                               data.data() + protocol->headerSize(), 256);
+    EXPECT_EQ(ArduinoSerialGeneralResult::ERROR_PAYLOAD_SIZE_TOO_BIG, header_result);
+}
+
 TEST_F(FArduinoSerialProtocol, ReceivePacket)
 {
     ASSERT_TRUE(syncSecondary());
@@ -270,6 +280,764 @@ TEST_F(FArduinoSerialProtocol, ReceivePacket)
     auto result4 = protocol->readBytes(data + protocol->headerSize(), 2);
     ASSERT_EQ(ArduinoSerialReadResult::OK, result4.read_result);
     ASSERT_EQ(2, result4.bytes_read);
+
+    auto operation5 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation5.read_operation);
+    ASSERT_EQ(1, operation5.bytes_to_read);
+    ASSERT_EQ(0, operation5.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacket2)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x00, 0x01,
+            0x04, 0x09, 0x24, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result3 = protocol->readBytes(data + 2, protocol->headerSize() - 2);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result3.read_result);
+    ASSERT_EQ(protocol->headerSize() - 2, result3.bytes_read);
+
+    auto operation4 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_PAYLOAD, operation4.read_operation);
+    ASSERT_EQ(4, operation4.bytes_to_read);
+    ASSERT_EQ(1, operation4.id);
+
+    auto result4 = protocol->readBytes(data + protocol->headerSize(), 4);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result4.read_result);
+    ASSERT_EQ(4, result4.bytes_read);
+
+    auto operation5 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation5.read_operation);
+    ASSERT_EQ(1, operation5.bytes_to_read);
+    ASSERT_EQ(0, operation5.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceiveTwoPackets)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    {
+        const uint8_t data[] = {
+                0xA5, 0x63, 0x00, 0x01,
+                0x02, 0x1B, 0xFA, 0xBB,
+                0x00, 0x00};
+
+        auto operation1 = protocol->nextOperation();
+        ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+        ASSERT_EQ(1, operation1.bytes_to_read);
+        ASSERT_EQ(0, operation1.id);
+
+        auto result1 = protocol->readBytes(data, 1);
+        ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+        ASSERT_EQ(1, result1.bytes_read);
+
+        auto operation2 = protocol->nextOperation();
+        ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+        ASSERT_EQ(1, operation2.bytes_to_read);
+        ASSERT_EQ(0, operation2.id);
+
+        auto result2 = protocol->readBytes(data + 1, 1);
+        ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+        ASSERT_EQ(1, result2.bytes_read);
+
+        auto operation3 = protocol->nextOperation();
+        ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+        ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+        ASSERT_EQ(0, operation3.id);
+
+        auto result3 = protocol->readBytes(data + 2, protocol->headerSize() - 2);
+        ASSERT_EQ(ArduinoSerialReadResult::OK, result3.read_result);
+        ASSERT_EQ(protocol->headerSize() - 2, result3.bytes_read);
+
+        auto operation4 = protocol->nextOperation();
+        ASSERT_EQ(ArduinoSerialOperation::READ_PAYLOAD, operation4.read_operation);
+        ASSERT_EQ(2, operation4.bytes_to_read);
+        ASSERT_EQ(1, operation4.id);
+
+        auto result4 = protocol->readBytes(data + protocol->headerSize(), 2);
+        ASSERT_EQ(ArduinoSerialReadResult::OK, result4.read_result);
+        ASSERT_EQ(2, result4.bytes_read);
+
+        auto operation5 = protocol->nextOperation();
+        ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation5.read_operation);
+        ASSERT_EQ(1, operation5.bytes_to_read);
+        ASSERT_EQ(0, operation5.id);
+    }
+    {
+        const uint8_t data[] = {
+                0xA5, 0x63, 0x00, 0x02,
+                0x04, 0x36, 0x95, 0x7F,
+                0x0A, 0x2B, 0x30, 0x45};
+
+        auto operation1 = protocol->nextOperation();
+        ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+        ASSERT_EQ(1, operation1.bytes_to_read);
+        ASSERT_EQ(0, operation1.id);
+
+        auto result1 = protocol->readBytes(data, 1);
+        ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+        ASSERT_EQ(1, result1.bytes_read);
+
+        auto operation2 = protocol->nextOperation();
+        ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+        ASSERT_EQ(1, operation2.bytes_to_read);
+        ASSERT_EQ(0, operation2.id);
+
+        auto result2 = protocol->readBytes(data + 1, 1);
+        ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+        ASSERT_EQ(1, result2.bytes_read);
+
+        auto operation3 = protocol->nextOperation();
+        ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+        ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+        ASSERT_EQ(0, operation3.id);
+
+        auto result3 = protocol->readBytes(data + 2, protocol->headerSize() - 2);
+        ASSERT_EQ(ArduinoSerialReadResult::OK, result3.read_result);
+        ASSERT_EQ(protocol->headerSize() - 2, result3.bytes_read);
+
+        auto operation4 = protocol->nextOperation();
+        ASSERT_EQ(ArduinoSerialOperation::READ_PAYLOAD, operation4.read_operation);
+        ASSERT_EQ(4, operation4.bytes_to_read);
+        ASSERT_EQ(2, operation4.id);
+
+        auto result4 = protocol->readBytes(data + protocol->headerSize(), 4);
+        ASSERT_EQ(ArduinoSerialReadResult::OK, result4.read_result);
+        ASSERT_EQ(4, result4.bytes_read);
+
+        auto operation5 = protocol->nextOperation();
+        ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation5.read_operation);
+        ASSERT_EQ(1, operation5.bytes_to_read);
+        ASSERT_EQ(0, operation5.id);
+    }
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketSyncError1)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA6, 0x63, 0xA5, 0x01,
+            0x04, 0x09, 0x24, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_UNEXPECTED_DATA, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_UNEXPECTED_DATA, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(1, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result4 = protocol->readBytes(data + 2, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result4.read_result);
+    ASSERT_EQ(1, result4.bytes_read);
+
+    auto operation4 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation4.read_operation);
+    ASSERT_EQ(1, operation4.bytes_to_read);
+    ASSERT_EQ(0, operation4.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketSyncError2)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x93, 0xA5, 0x01,
+            0x04, 0x09, 0x24, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_UNEXPECTED_DATA, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(1, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result4 = protocol->readBytes(data + 2, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result4.read_result);
+    ASSERT_EQ(1, result4.bytes_read);
+
+    auto operation4 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation4.read_operation);
+    ASSERT_EQ(1, operation4.bytes_to_read);
+    ASSERT_EQ(0, operation4.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketErrorHeaderID1)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x10, 0x01,
+            0x04, 0x09, 0x24, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result3 = protocol->readBytes(data + 2, protocol->headerSize() - 2);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_CHECKSUM, result3.read_result);
+    ASSERT_EQ(4, result3.bytes_read);
+
+    auto operation5 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation5.read_operation);
+    ASSERT_EQ(1, operation5.bytes_to_read);
+    ASSERT_EQ(0, operation5.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketErrorHeaderID2)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x00, 0x00,
+            0x04, 0x09, 0x24, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result3 = protocol->readBytes(data + 2, protocol->headerSize() - 2);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_CHECKSUM, result3.read_result);
+    ASSERT_EQ(4, result3.bytes_read);
+
+    auto operation5 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation5.read_operation);
+    ASSERT_EQ(1, operation5.bytes_to_read);
+    ASSERT_EQ(0, operation5.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketErrorHeaderLength)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x00, 0x01,
+            0x12, 0x09, 0x24, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result3 = protocol->readBytes(data + 2, protocol->headerSize() - 2);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_CHECKSUM, result3.read_result);
+    ASSERT_EQ(4, result3.bytes_read);
+
+    auto operation5 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation5.read_operation);
+    ASSERT_EQ(1, operation5.bytes_to_read);
+    ASSERT_EQ(0, operation5.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketErrorHeaderCRC)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x00, 0x01,
+            0x12, 0x09, 0x24, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result3 = protocol->readBytes(data + 2, protocol->headerSize() - 2);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_CHECKSUM, result3.read_result);
+    ASSERT_EQ(4, result3.bytes_read);
+
+    auto operation5 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation5.read_operation);
+    ASSERT_EQ(1, operation5.bytes_to_read);
+    ASSERT_EQ(0, operation5.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketErrorPayloadCRC1)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x00, 0x01,
+            0x04, 0x09, 0x20, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result3 = protocol->readBytes(data + 2, protocol->headerSize() - 2);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result3.read_result);
+    ASSERT_EQ(protocol->headerSize() - 2, result3.bytes_read);
+
+    auto operation4 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_PAYLOAD, operation4.read_operation);
+    ASSERT_EQ(4, operation4.bytes_to_read);
+    ASSERT_EQ(1, operation4.id);
+
+    auto result4 = protocol->readBytes(data + protocol->headerSize(), 4);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_CHECKSUM, result4.read_result);
+    ASSERT_EQ(4, result4.bytes_read);
+
+    auto operation5 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation5.read_operation);
+    ASSERT_EQ(1, operation5.bytes_to_read);
+    ASSERT_EQ(0, operation5.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketErrorPayloadCRC2)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x00, 0x01,
+            0x04, 0x09, 0x24, 0xBA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result3 = protocol->readBytes(data + 2, protocol->headerSize() - 2);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result3.read_result);
+    ASSERT_EQ(protocol->headerSize() - 2, result3.bytes_read);
+
+    auto operation4 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_PAYLOAD, operation4.read_operation);
+    ASSERT_EQ(4, operation4.bytes_to_read);
+    ASSERT_EQ(1, operation4.id);
+
+    auto result4 = protocol->readBytes(data + protocol->headerSize(), 4);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_CHECKSUM, result4.read_result);
+    ASSERT_EQ(4, result4.bytes_read);
+
+    auto operation5 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation5.read_operation);
+    ASSERT_EQ(1, operation5.bytes_to_read);
+    ASSERT_EQ(0, operation5.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketErrorPayload)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x00, 0x01,
+            0x04, 0x09, 0x24, 0xEA,
+            0x0A, 0x3B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result3 = protocol->readBytes(data + 2, protocol->headerSize() - 2);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result3.read_result);
+    ASSERT_EQ(protocol->headerSize() - 2, result3.bytes_read);
+
+    auto operation4 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_PAYLOAD, operation4.read_operation);
+    ASSERT_EQ(4, operation4.bytes_to_read);
+    ASSERT_EQ(1, operation4.id);
+
+    auto result4 = protocol->readBytes(data + protocol->headerSize(), 4);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_CHECKSUM, result4.read_result);
+    ASSERT_EQ(4, result4.bytes_read);
+
+    auto operation5 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation5.read_operation);
+    ASSERT_EQ(1, operation5.bytes_to_read);
+    ASSERT_EQ(0, operation5.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketInsufficientLength1)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x00, 0x01,
+            0x04, 0x09, 0x24, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 0);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_INSUFFICIENT_DATA_LENGTH, result1.read_result);
+    ASSERT_EQ(0, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketInsufficientLength2)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x00, 0x01,
+            0x04, 0x09, 0x24, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 0);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_INSUFFICIENT_DATA_LENGTH, result2.read_result);
+    ASSERT_EQ(0, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(1, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketInsufficientLength3)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x00, 0x01,
+            0x04, 0x09, 0x24, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result3 = protocol->readBytes(data + 2, protocol->headerSize() - 3);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_INSUFFICIENT_DATA_LENGTH, result3.read_result);
+    ASSERT_EQ(0, result3.bytes_read);
+
+    auto operation4 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation4.read_operation);
+    ASSERT_EQ(protocol->headerSize() - 2, operation4.bytes_to_read);
+    ASSERT_EQ(0, operation4.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketInsufficientLength4)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x00, 0x01,
+            0x04, 0x09, 0x24, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 1);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result3 = protocol->readBytes(data + 2, protocol->headerSize() - 2);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result3.read_result);
+    ASSERT_EQ(protocol->headerSize() - 2, result3.bytes_read);
+
+    auto operation4 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_PAYLOAD, operation4.read_operation);
+    ASSERT_EQ(4, operation4.bytes_to_read);
+    ASSERT_EQ(1, operation4.id);
+
+    auto result4 = protocol->readBytes(data + protocol->headerSize(), 3);
+    ASSERT_EQ(ArduinoSerialReadResult::ERROR_INSUFFICIENT_DATA_LENGTH, result4.read_result);
+    ASSERT_EQ(0, result4.bytes_read);
+
+    auto operation5 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_PAYLOAD, operation5.read_operation);
+    ASSERT_EQ(4, operation5.bytes_to_read);
+    ASSERT_EQ(1, operation5.id);
+}
+
+TEST_F(FArduinoSerialProtocol, ReceivePacketExtensiveLength)
+{
+    ASSERT_TRUE(syncSecondary());
+
+    const uint8_t data[] = {
+            0xA5, 0x63, 0x00, 0x01,
+            0x04, 0x09, 0x24, 0xEA,
+            0x0A, 0x2B, 0x30, 0x45,
+            0x00, 0x00, 0x00, 0x00};
+
+    auto operation1 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation1.read_operation);
+    ASSERT_EQ(1, operation1.bytes_to_read);
+    ASSERT_EQ(0, operation1.id);
+
+    auto result1 = protocol->readBytes(data, 16);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result1.read_result);
+    ASSERT_EQ(1, result1.bytes_read);
+
+    auto operation2 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation2.read_operation);
+    ASSERT_EQ(1, operation2.bytes_to_read);
+    ASSERT_EQ(0, operation2.id);
+
+    auto result2 = protocol->readBytes(data + 1, 15);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result2.read_result);
+    ASSERT_EQ(1, result2.bytes_read);
+
+    auto operation3 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation3.read_operation);
+    ASSERT_EQ(protocol->headerSize() - 2, operation3.bytes_to_read);
+    ASSERT_EQ(0, operation3.id);
+
+    auto result3 = protocol->readBytes(data + 2, 14);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result3.read_result);
+    ASSERT_EQ(protocol->headerSize() - 2, result3.bytes_read);
+
+    auto operation4 = protocol->nextOperation();
+    ASSERT_EQ(ArduinoSerialOperation::READ_PAYLOAD, operation4.read_operation);
+    ASSERT_EQ(4, operation4.bytes_to_read);
+    ASSERT_EQ(1, operation4.id);
+
+    auto result4 = protocol->readBytes(data + protocol->headerSize(), 8);
+    ASSERT_EQ(ArduinoSerialReadResult::OK, result4.read_result);
+    ASSERT_EQ(4, result4.bytes_read);
 
     auto operation5 = protocol->nextOperation();
     ASSERT_EQ(ArduinoSerialOperation::READ_HEADER, operation5.read_operation);
