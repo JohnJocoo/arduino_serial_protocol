@@ -1093,7 +1093,7 @@ TEST_F(FArduinoSerialProtocol, ReceivePacketsHeaderCRCError)
         for (int i = 0; i < 6; ++i)
         {
             auto result_tmp = protocol->readBytes(data + (6 + i), 1);
-            ASSERT_EQ(ArduinoSerialReadResult::ERROR_UNEXPECTED_DATA, result_tmp.read_result);
+            ASSERT_EQ(ArduinoSerialReadResult::NOPE, result_tmp.read_result);
             ASSERT_EQ(1, result_tmp.bytes_read);
 
             auto operation_tmp = protocol->nextOperation();

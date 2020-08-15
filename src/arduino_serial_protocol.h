@@ -94,7 +94,8 @@ private:
     explicit ArduinoSerialProtocol();
 
     char state;
-    bool was_synced;
+    bool was_synced : 1;
+    bool scan_strobe : 1;
     uint16_t seq_id;
 
     PayloadState payload_state;

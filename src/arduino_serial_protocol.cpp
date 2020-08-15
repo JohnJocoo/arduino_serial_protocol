@@ -292,6 +292,7 @@ ArduinoSerialProtocol ArduinoSerialProtocol::createSecondary()
 ArduinoSerialProtocol::ArduinoSerialProtocol()
 : state{static_cast<char>(State::WAITING_SYNC)}
 , was_synced{false}
+, scan_strobe{false}
 , seq_id{0}
 {
     clear(payload_state);
@@ -406,7 +407,20 @@ ArduinoSerialProtocol::readBytes(const void* data, size_t data_size)
                                SYNC_STROBE_1, State::READ_SYNC_STROBE_2,
                                State::WAITING_SYNC);
         case State::IDLE:
-            return read_strobe_or_sync(state, data, data_size);
+        {
+            ArduinoSerialReceiveResult strobe_result =
+                    read_strobe_or_sync(state, data, data_size);
+            if (strobe_result.read_result == ArduinoSerialReadResult::OK)
+            {
+                scan_strobe = false;
+            }
+            if (strobe_result.read_result == ArduinoSerialReadResult::ERROR_UNEXPECTED_DATA
+                && scan_strobe)
+            {
+                strobe_result.read_result = ArduinoSerialReadResult::NOPE;
+            }
+            return strobe_result;
+        }
         case State::READ_STROBE_2:
             return read_strobe(state, data, data_size,
                                STROBE_2, State::READ_HEADER,
@@ -426,7 +440,15 @@ ArduinoSerialProtocol::readBytes(const void* data, size_t data_size)
         case State::WRITE_SYNC_REPLY:
             return receive_result(ArduinoSerialReadResult::NOPE, 0);
         case State::READ_HEADER:
-            return read_header(state, payload_state, data, data_size);
+        {
+            ArduinoSerialReceiveResult header_result =
+                    read_header(state, payload_state, data, data_size);
+            if (header_result.read_result == ArduinoSerialReadResult::ERROR_CHECKSUM)
+            {
+                scan_strobe = true;
+            }
+            return header_result;
+        }
         case State::READ_PAYLOAD:
             return read_payload(state, payload_state, data, data_size);
         default:
